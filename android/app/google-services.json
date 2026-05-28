@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1055082590155",
+    "project_id": "inventory-count-app-jao",
+    "storage_bucket": "inventory-count-app-jao.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1055082590155:android:79b8cc4f33efa1bcfd504e",
+        "android_client_info": {
+          "package_name": "com.jao.inventory_count_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAVRREIwsqM_4B_qDVy-dgTlG1J09OEt_4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
