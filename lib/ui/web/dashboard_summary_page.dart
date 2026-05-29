@@ -1,102 +1,162 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:provider/provider.dart';
 
+import '../../core/app_theme.dart';
 import '../../core/discrepancy_service.dart';
+import '../../providers/dashboard_provider.dart';
 
 class DashboardSummaryPage extends StatelessWidget {
   const DashboardSummaryPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).primaryColor;
+    final dashboardProvider = context.watch<DashboardProvider>();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Inventory Dashboard')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E88E5),
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () => _exportActualCountReport(context),
-                icon: const Icon(Icons.download),
-                label: const Text('Export Actual Count XLSX'),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('Inventory Overview'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
+        centerTitle: false,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 24.0),
+            child: ElevatedButton.icon(
+              onPressed: () => _exportActualCountReport(context),
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: const Text('EXPORT REPORT (XLSX)'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               ),
             ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(child: _buildSummaryCard('Total Items', '1,240', Icons.inventory, Colors.blue)),
-                const SizedBox(width: 16),
-                Expanded(child: _buildSummaryCard('Discrepancies', '14', Icons.warning, Colors.orange)),
-                const SizedBox(width: 16),
-                Expanded(child: _buildSummaryCard('Ongoing Counts', '5', Icons.pending_actions, Colors.purple)),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: _buildChartCard(
-                    'Discrepancy by Category (PHP ₱)',
-                    const _CategoryDiscrepancyChart(),
-                  ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  flex: 1,
-                  child: _buildChartCard(
-                    'Count Status',
-                    const _CountStatusPieChart(),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
+      body: dashboardProvider.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(32.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Key Metrics',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(child: _buildSummaryCard('Total Items', dashboardProvider.totalItems.toString(), Icons.inventory_2_outlined, primaryColor)),
+                      const SizedBox(width: 20),
+                      Expanded(child: _buildSummaryCard('Discrepancies', dashboardProvider.discrepanciesCount.toString(), Icons.warning_amber_rounded, AppTheme.warningColor)),
+                      const SizedBox(width: 20),
+                      Expanded(child: _buildSummaryCard('Active Counts', dashboardProvider.activeCounts.toString(), Icons.timer_outlined, Colors.deepPurple)),
+                    ],
+                  ),
+                  const SizedBox(height: 40),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: _buildChartCard(
+                          'Discrepancy by Category (PHP ₱)',
+                          const _CategoryDiscrepancyChart(),
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      Expanded(
+                        flex: 1,
+                        child: _buildChartCard(
+                          'Count Completion Status',
+                          const _CountStatusPieChart(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
     );
   }
 
   Future<void> _exportActualCountReport(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     messenger.showSnackBar(
-      const SnackBar(content: Text('Generating Actual Count XLSX...')),
+      const SnackBar(
+        content: Text('Generating Actual Count XLSX...'),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
 
     try {
       final savedLocation = await DiscrepancyService().exportActualCountReport();
       messenger.showSnackBar(
-        SnackBar(content: Text('Actual Count XLSX saved: $savedLocation')),
+        SnackBar(
+          content: Text('Actual Count XLSX saved: $savedLocation'),
+          backgroundColor: AppTheme.successColor,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } catch (error) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Export failed: $error'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Export failed: $error'),
+          backgroundColor: AppTheme.errorColor,
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
 
   Widget _buildSummaryCard(String title, String value, IconData icon, Color color) {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(24.0),
         child: Row(
           children: [
-            CircleAvatar(
-              backgroundColor: color.withAlpha(26),
-              child: Icon(icon, color: color),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 28),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 20),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
+                ),
               ],
             ),
           ],
@@ -107,14 +167,26 @@ class DashboardSummaryPage extends StatelessWidget {
 
   Widget _buildChartCard(String title, Widget chart) {
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(32.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 24),
-            SizedBox(height: 300, child: chart),
+            Text(
+              title,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 32),
+            SizedBox(height: 320, child: chart),
           ],
         ),
       ),

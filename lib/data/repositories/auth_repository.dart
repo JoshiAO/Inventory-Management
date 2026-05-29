@@ -31,7 +31,44 @@ class AuthRepository {
     }
   }
 
+  Future<void> createFirestoreUser(String uid, String email, String name, String role, List<String> categories, String facilityId) async {
+    final userModel = UserModel(
+      uid: uid,
+      email: email,
+      name: name,
+      role: role,
+      assignedCategories: categories,
+      facilityId: facilityId,
+    );
+
+    await _db.collection('users').doc(uid).set(userModel.toFirestore());
+  }
+
+  Future<void> signUp(String email, String password, String name, String role, List<String> categories, String facilityId) async {
+    try {
+      final creds = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      
+      await createFirestoreUser(creds.user!.uid, email, name, role, categories, facilityId);
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<void> signOut() async {
     await _auth.signOut();
+  }
+
+  Future<void> updatePassword(String newPassword) async {
+    final user = _auth.currentUser;
+    if (user != null) {
+      await user.updatePassword(newPassword);
+    }
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email);
   }
 }

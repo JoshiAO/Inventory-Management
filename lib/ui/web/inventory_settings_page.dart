@@ -38,6 +38,12 @@ class InventorySettingsPage extends StatelessWidget {
               'Update the Stock Status Report for current inventory targets.',
               () => _handleUpload(context, 'SSR'),
             ),
+            _buildUploadCard(
+              context,
+              'Categories',
+              'Update the list of available inventory categories.',
+              () => _handleUpload(context, 'Categories'),
+            ),
             const SizedBox(height: 48),
             _buildSectionHeader(context, 'Danger Zone', Icons.warning_amber_rounded, color: Colors.red),
             const SizedBox(height: 16),
@@ -126,8 +132,12 @@ class InventorySettingsPage extends StatelessWidget {
           data = ExcelService.parseItemMaster(result.files.first.bytes!);
         } else if (type == 'SSR') {
           data = ExcelService.parseSSR(result.files.first.bytes!);
+        } else if (type == 'Price List') {
+          data = ExcelService.parsePriceList(result.files.first.bytes!);
+        } else if (type == 'Categories') {
+          data = ExcelService.parseCategories(result.files.first.bytes!);
         } else {
-          data = ExcelService.parseItemMaster(result.files.first.bytes!);
+          data = [];
         }
 
         await adminProvider.uploadInventoryData(type, data);

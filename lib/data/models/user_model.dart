@@ -1,22 +1,28 @@
 class UserModel {
   final String uid;
   final String email;
+  final String name;
   final String role; // 'user' | 'superuser'
-  final String assignedCategory;
+  final List<String> assignedCategories;
+  final String facilityId;
 
   UserModel({
     required this.uid,
     required this.email,
+    required this.name,
     required this.role,
-    required this.assignedCategory,
+    required this.assignedCategories,
+    required this.facilityId,
   });
 
   factory UserModel.fromFirestore(Map<String, dynamic> data) {
     return UserModel(
       uid: data['uid'] ?? '',
       email: data['email'] ?? '',
+      name: data['name'] ?? '',
       role: data['role'] ?? 'user',
-      assignedCategory: data['assignedCategory'] ?? '',
+      assignedCategories: List<String>.from(data['assignedCategories'] ?? []),
+      facilityId: data['facilityId'] ?? '',
     );
   }
 
@@ -24,8 +30,10 @@ class UserModel {
     return {
       'uid': uid,
       'email': email,
+      'name': name,
       'role': role,
-      'assignedCategory': assignedCategory,
+      'assignedCategories': assignedCategories,
+      'facilityId': facilityId,
     };
   }
 }

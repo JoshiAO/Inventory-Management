@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../data/models/item_model.dart';
 import '../data/models/count_model.dart';
 import '../data/repositories/count_repository.dart';
@@ -6,12 +8,12 @@ import '../data/repositories/count_repository.dart';
 class CountProvider with ChangeNotifier {
   final CountRepository _repository = CountRepository();
   
-  List<ItemModel> _items = [];
+  List<ItemMaster> _items = [];
   Map<String, CountModel> _draftCounts = {}; // productCode -> CountModel
   bool _isLoading = false;
   String _searchQuery = "";
 
-  List<ItemModel> get items => _items.where((item) {
+  List<ItemMaster> get items => _items.where((item) {
     return item.itemName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
            item.itemCode.toLowerCase().contains(_searchQuery.toLowerCase());
   }).toList();
@@ -46,7 +48,33 @@ class CountProvider with ChangeNotifier {
     notifyListeners();
     try {
       for (var count in _draftCounts.values) {
-        await _repository.saveCount(count);
+        // Upload images if local paths exist
+        List<String> uploadedUrls = List.from(count.images);
+        for (var localPath in count.localImagePaths) {
+          final file = File(localPath);
+          final storageRef = FirebaseStorage.instance
+              .ref()
+              .child('inventory_photos/${count.productCode}/${count.userId}/${DateTime.now().millisecondsSinceEpoch}.jpg');
+          
+          final task = await storageRef.putFile(file);
+          final downloadUrl = await task.ref.getDownloadURL();
+          uploadedUrls.add(downloadUrl);
+        }
+
+        final finalCount = CountModel(
+          id: count.id,
+          timestamp: count.timestamp,
+          userId: count.userId,
+          category: count.category,
+          productCode: count.productCode,
+          facilityId: count.facilityId,
+          quantities: count.quantities,
+          images: uploadedUrls,
+          localImagePaths: [],
+          isUploaded: true,
+        );
+
+        await _repository.saveCount(finalCount);
       }
       _draftCounts.clear();
     } finally {

@@ -6,8 +6,10 @@ class CountModel {
   final String userId;
   final String category;
   final String productCode;
+  final String facilityId;
   final CountQuantities quantities;
-  final List<String> images;
+  final List<String> images; // Remote URLs
+  final List<String> localImagePaths; // Local file paths
   final bool isUploaded;
 
   CountModel({
@@ -16,8 +18,10 @@ class CountModel {
     required this.userId,
     required this.category,
     required this.productCode,
+    required this.facilityId,
     required this.quantities,
     required this.images,
+    required this.localImagePaths,
     required this.isUploaded,
   });
 
@@ -28,8 +32,10 @@ class CountModel {
       userId: data['userId'] ?? '',
       category: data['category'] ?? '',
       productCode: data['productCode'] ?? '',
+      facilityId: data['facilityId'] ?? '',
       quantities: CountQuantities.fromMap(data['quantities'] ?? {}),
       images: List<String>.from(data['images'] ?? []),
+      localImagePaths: [],
       isUploaded: data['isUploaded'] ?? false,
     );
   }
@@ -40,6 +46,7 @@ class CountModel {
       'userId': userId,
       'category': category,
       'productCode': productCode,
+      'facilityId': facilityId,
       'quantities': quantities.toMap(),
       'images': images,
       'isUploaded': isUploaded,

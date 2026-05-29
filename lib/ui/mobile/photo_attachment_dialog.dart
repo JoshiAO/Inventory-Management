@@ -1,4 +1,4 @@
-import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -9,7 +9,7 @@ import '../../data/models/item_model.dart';
 import '../../data/models/count_model.dart';
 
 class PhotoAttachmentDialog extends StatefulWidget {
-  final ItemModel item;
+  final ItemMaster item;
   const PhotoAttachmentDialog({super.key, required this.item});
 
   @override
@@ -18,65 +18,29 @@ class PhotoAttachmentDialog extends StatefulWidget {
 
 class _PhotoAttachmentDialogState extends State<PhotoAttachmentDialog> {
   final ImagePicker _picker = ImagePicker();
-  bool _uploading = false;
 
   Future<void> _takePhoto() async {
-    final messenger = ScaffoldMessenger.of(context);
     final user = context.read<AuthProvider>().userModel!;
     final countProvider = context.read<CountProvider>();
     final itemCode = widget.item.itemCode;
-    final category = widget.item.category;
     final existingDraft = countProvider.getDraft(itemCode);
 
-    final XFile? photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+    final XFile? photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 50); // Compression here
     if (photo == null) return;
 
-    setState(() {
-      _uploading = true;
-    });
-
-    try {
-      final bytes = await photo.readAsBytes();
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('inventory_photos/$itemCode/${user.uid}/${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-      final task = storageRef.putData(
-        bytes,
-        SettableMetadata(contentType: 'image/jpeg'),
-      );
-      final snapshot = await task.whenComplete(() {});
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-
-      final updatedDraft = CountModel(
-        id: existingDraft?.id ?? '',
-        timestamp: existingDraft?.timestamp ?? DateTime.now(),
-        userId: user.uid,
-        category: category,
-        productCode: itemCode,
-        quantities: existingDraft?.quantities ?? CountQuantities(countCase: 0, countSubcase: 0, countPiece: 0),
-        images: [...(existingDraft?.images ?? []), downloadUrl],
-        isUploaded: existingDraft?.isUploaded ?? false,
-      );
-      countProvider.updateDraftCount(itemCode, updatedDraft);
-
-      if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Photo attached successfully.')),
-      );
-    } catch (error) {
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('Upload failed: $error'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _uploading = false;
-        });
-      }
-    }
+    final updatedDraft = CountModel(
+      id: existingDraft?.id ?? '',
+      timestamp: existingDraft?.timestamp ?? DateTime.now(),
+      userId: user.uid,
+      category: widget.item.category,
+      productCode: itemCode,
+      facilityId: user.facilityId,
+      quantities: existingDraft?.quantities ?? CountQuantities(countCase: 0, countSubcase: 0, countPiece: 0),
+      images: existingDraft?.images ?? [],
+      localImagePaths: [...(existingDraft?.localImagePaths ?? []), photo.path],
+      isUploaded: existingDraft?.isUploaded ?? false,
+    );
+    countProvider.updateDraftCount(itemCode, updatedDraft);
   }
 
   @override
@@ -84,6 +48,7 @@ class _PhotoAttachmentDialogState extends State<PhotoAttachmentDialog> {
     final countProvider = context.watch<CountProvider>();
     final draft = countProvider.getDraft(widget.item.itemCode);
     final images = draft?.images ?? [];
+    final localPaths = draft?.localImagePaths ?? [];
 
     return AlertDialog(
       title: Text('Photos: ${widget.item.itemName}'),
@@ -92,7 +57,7 @@ class _PhotoAttachmentDialogState extends State<PhotoAttachmentDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (images.isEmpty)
+            if (images.isEmpty && localPaths.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(20.0),
                 child: Text('No photos attached (Max 5)'),
@@ -100,61 +65,17 @@ class _PhotoAttachmentDialogState extends State<PhotoAttachmentDialog> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: images.map((url) {
-                return Stack(
-                  children: [
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        color: Colors.grey[200],
-                        image: url.isNotEmpty
-                            ? DecorationImage(image: NetworkImage(url), fit: BoxFit.cover)
-                            : null,
-                      ),
-                      child: url.isEmpty ? const Icon(Icons.image, color: Colors.grey) : null,
-                    ),
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: GestureDetector(
-                        onTap: () {
-                          final updatedImages = [...images]..remove(url);
-                          final existingDraft = countProvider.getDraft(widget.item.itemCode);
-                          if (existingDraft != null) {
-                            countProvider.updateDraftCount(
-                              widget.item.itemCode,
-                              CountModel(
-                                id: existingDraft.id,
-                                timestamp: existingDraft.timestamp,
-                                userId: existingDraft.userId,
-                                category: existingDraft.category,
-                                productCode: existingDraft.productCode,
-                                quantities: existingDraft.quantities,
-                                images: updatedImages,
-                                isUploaded: existingDraft.isUploaded,
-                              ),
-                            );
-                          }
-                        },
-                        child: const CircleAvatar(
-                          radius: 10,
-                          backgroundColor: Colors.red,
-                          child: Icon(Icons.close, size: 12, color: Colors.white),
-                        ),
-                      ),
-                    )
-                  ],
-                );
-              }).toList(),
+              children: [
+                ...images.map((url) => _buildImageWidget(url, isLocal: false)),
+                ...localPaths.map((path) => _buildImageWidget(path, isLocal: true)),
+              ],
             ),
             const SizedBox(height: 20),
-            if (images.length < 5)
+            if ((images.length + localPaths.length) < 5)
               ElevatedButton.icon(
-                onPressed: _uploading ? null : _takePhoto,
+                onPressed: _takePhoto,
                 icon: const Icon(Icons.camera_alt),
-                label: Text(_uploading ? 'Uploading...' : 'Take Photo'),
+                label: const Text('Take Photo'),
               ),
           ],
         ),
@@ -164,6 +85,64 @@ class _PhotoAttachmentDialogState extends State<PhotoAttachmentDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Close'),
         ),
+      ],
+    );
+  }
+
+  Widget _buildImageWidget(String source, {required bool isLocal}) {
+    final countProvider = context.read<CountProvider>();
+    
+    return Stack(
+      children: [
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.grey[200],
+            image: DecorationImage(
+              image: isLocal ? FileImage(File(source)) as ImageProvider : NetworkImage(source),
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+        Positioned(
+          right: 0,
+          top: 0,
+          child: GestureDetector(
+            onTap: () {
+              final existingDraft = countProvider.getDraft(widget.item.itemCode);
+              if (existingDraft != null) {
+                final newImages = [...existingDraft.images];
+                final newLocalPaths = [...existingDraft.localImagePaths];
+                
+                if (isLocal) newLocalPaths.remove(source);
+                else newImages.remove(source);
+
+                countProvider.updateDraftCount(
+                  widget.item.itemCode,
+                  CountModel(
+                    id: existingDraft.id,
+                    timestamp: existingDraft.timestamp,
+                    userId: existingDraft.userId,
+                    category: existingDraft.category,
+                    productCode: existingDraft.productCode,
+                    facilityId: existingDraft.facilityId,
+                    quantities: existingDraft.quantities,
+                    images: newImages,
+                    localImagePaths: newLocalPaths,
+                    isUploaded: existingDraft.isUploaded,
+                  ),
+                );
+              }
+            },
+            child: const CircleAvatar(
+              radius: 10,
+              backgroundColor: Colors.red,
+              child: Icon(Icons.close, size: 12, color: Colors.white),
+            ),
+          ),
+        )
       ],
     );
   }
