@@ -10,7 +10,7 @@ class AdminRepository {
   // Fetch all users
   Stream<List<UserModel>> getUsersStream() {
     return _db.collection('users').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => UserModel.fromFirestore(doc.data())).toList();
+      return snapshot.docs.map((doc) => UserModel.fromMap(doc.data())).toList();
     });
   }
 
@@ -21,7 +21,7 @@ class AdminRepository {
   // Facility management
   Stream<List<Facility>> getFacilitiesStream() {
     return _db.collection('facilities').snapshots().map((snapshot) {
-      return snapshot.docs.map((doc) => Facility.fromFirestore(doc.data(), doc.id)).toList();
+      return snapshot.docs.map((doc) => Facility.fromMap(doc.data(), doc.id)).toList();
     });
   }
 
@@ -55,7 +55,7 @@ class AdminRepository {
         facilityId: facilityId,
       );
 
-      await _db.collection('users').doc(creds.user!.uid).set(userModel.toFirestore());
+      await _db.collection('users').doc(creds.user!.uid).set(userModel.toMap());
     } finally {
       await tempApp.delete();
     }
@@ -63,7 +63,7 @@ class AdminRepository {
 
   // Update existing Firestore profile
   Future<void> updateUserProfile(UserModel user) async {
-    await _db.collection('users').doc(user.uid).update(user.toFirestore());
+    await _db.collection('users').doc(user.uid).update(user.toMap());
   }
 
   // Delete User record
@@ -79,9 +79,14 @@ class AdminRepository {
   // Clear documents in a collection (optionally scoped to facility)
   Future<void> clearCollection(String collectionName, {String? facilityId}) async {
     try {
-      Query query = _db.collection(collectionName);
-      if (facilityId != null) {
-        query = query.where('facilityId', isEqualTo: facilityId);
+      final isGlobal = collectionName == 'items' || collectionName == 'categories';
+      Query query;
+      
+      if (isGlobal) {
+        query = _db.collection(collectionName);
+      } else {
+        if (facilityId == null) throw Exception('Facility ID is required for clearing $collectionName');
+        query = _db.collection(collectionName).doc(facilityId).collection('records');
       }
       
       final snapshot = await query.get();
@@ -98,27 +103,28 @@ class AdminRepository {
   // Upload logic (SSR, Price List, Item Master, Categories)
   Future<void> uploadInventoryData(String type, List<Map<String, dynamic>> data, {String? facilityId}) async {
     try {
-      String collection;
-      if (type == 'SSR') {
-        collection = 'ssr_baseline';
-      } else if (type == 'Price List') {
-        collection = 'prices';
-      } else if (type == 'Categories') {
-        collection = 'categories';
-      } else {
-        collection = 'items';
+      const typeToCollection = {
+        'SSR': 'ssr_baseline',
+        'Price List': 'prices',
+        'Categories': 'categories',
+      };
+      
+      final collection = typeToCollection[type] ?? 'items';
+      final isGlobal = collection == 'items' || collection == 'categories';
+
+      if (!isGlobal && facilityId == null) {
+        throw Exception('Facility ID is required for $type upload');
       }
       
-      // Batch write for efficiency
       final batch = _db.batch();
-      for (var item in data) {
-        // Add facilityId if provided
-        if (facilityId != null) {
-          item['facilityId'] = facilityId;
-        }
+      final targetRef = isGlobal 
+          ? _db.collection(collection) 
+          : _db.collection(collection).doc(facilityId).collection('records');
 
-        // Use item_code as doc ID to prevent duplicates if possible, or just generate new ones
-        final docRef = _db.collection(collection).doc(item['item_code'] ?? _db.collection(collection).doc().id);
+      for (var item in data) {
+        // We no longer need to store facilityId inside the document for nested structure
+        final docId = item['item_code']?.toString() ?? _db.collection(collection).doc().id;
+        final docRef = targetRef.doc(docId);
         batch.set(docRef, item);
       }
       await batch.commit();

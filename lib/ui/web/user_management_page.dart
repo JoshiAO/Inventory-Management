@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../providers/admin_provider.dart';
 import '../../data/models/user_model.dart';
+import '../../data/models/facility_model.dart';
 
 class UserManagementPage extends StatefulWidget {
   const UserManagementPage({super.key});
@@ -76,13 +77,24 @@ class _UserManagementPageState extends State<UserManagementPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(user.email, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                              const SizedBox(height: 4),
-                              Row(
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
                                 children: [
                                   _buildBadge(user.role.toUpperCase(), 
                                       user.role == 'superuser' ? AppTheme.keneaPrimary : Colors.grey.shade600),
-                                  const SizedBox(width: 8),
-                                  _buildBadge('CAT: ${user.assignedCategories.join(", ")}', Colors.blueGrey),
+                                  if (user.facilityId.isNotEmpty)
+                                    _buildBadge(
+                                      adminProvider.facilities.firstWhere((f) => f.id == user.facilityId, orElse: () => Facility(id: '', name: 'Unknown', location: '')).name,
+                                      Colors.indigo,
+                                      icon: Icons.location_on,
+                                    ),
+                                  _buildBadge(
+                                    _summarizeCategories(user.assignedCategories),
+                                    Colors.blueGrey,
+                                    icon: Icons.category,
+                                  ),
                                 ],
                               ),
                             ],
@@ -119,22 +131,37 @@ class _UserManagementPageState extends State<UserManagementPage> {
     );
   }
 
-  Widget _buildBadge(String label, Color color) {
+  String _summarizeCategories(List<String> cats) {
+    if (cats.isEmpty) return 'No Categories';
+    if (cats.length <= 2) return cats.join(', ');
+    return '${cats[0]}, ${cats[1]} +${cats.length - 2} more';
+  }
+
+  Widget _buildBadge(String label, Color color, {IconData? icon}) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withOpacity(0.2)),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 10, color: color),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,31 +1,42 @@
-import 'package:flutter/material.dart';
+import '../data/models/item_model.dart';
 import '../data/models/price_model.dart';
 import '../data/models/ssr_baseline_model.dart';
 import '../data/models/count_model.dart';
 import '../data/models/merged_item_model.dart';
 import '../data/repositories/count_repository.dart';
+import 'base_provider.dart';
 
-class ItemManagerProvider with ChangeNotifier {
+class ItemManagerProvider extends BaseProvider {
   final CountRepository _repository = CountRepository();
 
   List<MergedItem> _mergedItems = [];
   List<String> _categories = ['ALL'];
   String _selectedCategory = 'ALL';
   String _searchQuery = "";
-  bool _isLoading = false;
+  bool _showOnlyWithSSR = false;
 
   List<MergedItem> get items {
+    final query = _searchQuery.toLowerCase();
     return _mergedItems.where((item) {
       final matchesCategory = _selectedCategory == 'ALL' || item.master.category == _selectedCategory;
-      final matchesSearch = item.master.itemName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                            item.master.itemCode.toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
+      final matchesSearch = item.master.itemName.toLowerCase().contains(query) ||
+                            item.master.itemCode.toLowerCase().contains(query);
+      final hasSSR = item.ssr != null && (item.ssr!.ssrCase > 0 || item.ssr!.ssrSubcase > 0 || item.ssr!.ssrPiece > 0);
+      final matchesSSRFilter = !_showOnlyWithSSR || hasSSR;
+
+      return matchesCategory && matchesSearch && matchesSSRFilter;
     }).toList();
+  }
+
+  bool get showOnlyWithSSR => _showOnlyWithSSR;
+
+  void toggleSSRFilter(bool value) {
+    _showOnlyWithSSR = value;
+    notifyListeners();
   }
 
   List<String> get categories => _categories;
   String get selectedCategory => _selectedCategory;
-  bool get isLoading => _isLoading;
 
   void updateSearch(String query) {
     _searchQuery = query;
@@ -40,27 +51,48 @@ class ItemManagerProvider with ChangeNotifier {
   }
 
   Future<void> loadData(String facilityId) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
+    await performTask(() async {
       final masters = await _repository.getItemsByCategory('ALL');
       final prices = await _repository.getPricesByFacility(facilityId);
       final baselines = await _repository.getSsrBaselinesByFacility(facilityId);
       final counts = await _repository.getRecentCountsByFacility(facilityId);
 
-      // Extract unique categories
-      _categories = ['ALL', ...masters.map((m) => m.category).toSet().toList()];
+      // Collect all unique item codes across Master, Prices, and SSR
+      final allCodes = {
+        ...masters.map((m) => m.itemCode),
+        ...prices.map((p) => p.itemCode),
+        ...baselines.map((b) => b.itemCode),
+      };
+
+      if (allCodes.isEmpty) {
+        _mergedItems = [];
+        _categories = ['ALL'];
+        return;
+      }
+
+      // Extract categories from masters
+      _categories = ['ALL', ...masters.map((m) => m.category).where((c) => c.isNotEmpty).toSet().toList()];
 
       // Merge data
-      _mergedItems = masters.map((m) {
-        final price = prices.firstWhere((p) => p.itemCode == m.itemCode, orElse: () => PriceList(itemCode: m.itemCode, itemName: m.itemName, priceCase: 0, priceSubcase: 0, pricePiece: 0, facilityId: facilityId));
-        final ssr = baselines.firstWhere((b) => b.itemCode == m.itemCode, orElse: () => SsrBaseline(itemCode: m.itemCode, itemName: m.itemName, ssrCase: 0, ssrSubcase: 0, ssrPiece: 0, facilityId: facilityId));
+      _mergedItems = allCodes.map((code) {
+        final m = masters.firstWhere(
+          (m) => m.itemCode == code, 
+          orElse: () => ItemMaster(itemCode: code, itemName: code, category: 'Uncategorized')
+        );
         
-        // Find most recent count for this item
+        final price = prices.firstWhere(
+          (p) => p.itemCode == code, 
+          orElse: () => PriceList(itemCode: code, itemName: m.itemName, priceCase: 0, priceSubcase: 0, pricePiece: 0, facilityId: facilityId)
+        );
+        
+        final ssr = baselines.firstWhere(
+          (b) => b.itemCode == code, 
+          orElse: () => SsrBaseline(itemCode: code, itemName: m.itemName, ssrCase: 0, ssrSubcase: 0, ssrPiece: 0, facilityId: facilityId)
+        );
+        
         CountModel? latestCount;
         try {
-          latestCount = counts.firstWhere((c) => c.productCode == m.itemCode);
+          latestCount = counts.firstWhere((c) => c.productCode == code);
         } catch (_) {
           latestCount = null;
         }
@@ -72,10 +104,6 @@ class ItemManagerProvider with ChangeNotifier {
           count: latestCount,
         );
       }).toList();
-
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    });
   }
 }

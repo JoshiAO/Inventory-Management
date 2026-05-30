@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../providers/item_manager_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/admin_provider.dart';
 import '../../data/models/merged_item_model.dart';
 import '../../core/app_theme.dart';
 
@@ -14,12 +15,15 @@ class ItemManagerPage extends StatefulWidget {
 }
 
 class _ItemManagerPageState extends State<ItemManagerPage> {
+  String? _selectedFacilityId;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = context.read<AuthProvider>().userModel;
       if (user != null) {
+        setState(() => _selectedFacilityId = user.facilityId);
         context.read<ItemManagerProvider>().loadData(user.facilityId);
       }
     });
@@ -28,6 +32,7 @@ class _ItemManagerPageState extends State<ItemManagerPage> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ItemManagerProvider>();
+    final adminProvider = context.watch<AdminProvider>();
     final currencyFormat = NumberFormat.currency(symbol: '₱', decimalDigits: 2);
 
     return Scaffold(
@@ -74,15 +79,41 @@ class _ItemManagerPageState extends State<ItemManagerPage> {
                   ),
                 ),
                 const SizedBox(width: 24),
+                Expanded(
+                  flex: 1,
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedFacilityId,
+                    decoration: InputDecoration(
+                      labelText: 'Facility',
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    items: adminProvider.facilities.map((f) {
+                      return DropdownMenuItem(value: f.id, child: Text(f.name));
+                    }).toList(),
+                    onChanged: (v) {
+                      setState(() => _selectedFacilityId = v);
+                      provider.loadData(v!);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 24),
                 ElevatedButton.icon(
+                  onPressed: () => provider.toggleSSRFilter(!provider.showOnlyWithSSR),
+                  icon: Icon(provider.showOnlyWithSSR ? Icons.filter_alt : Icons.filter_alt_off),
+                  label: Text(provider.showOnlyWithSSR ? 'SHOWING SSR ONLY' : 'SHOW ALL ITEMS'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: provider.showOnlyWithSSR ? Colors.blue.shade700 : null,
+                  ),
+                ),
+                const SizedBox(width: 24),
+                IconButton(
                   onPressed: () {
-                    final user = context.read<AuthProvider>().userModel;
-                    if (user != null) {
-                      provider.loadData(user.facilityId);
+                    if (_selectedFacilityId != null) {
+                      provider.loadData(_selectedFacilityId!);
                     }
                   },
                   icon: const Icon(Icons.refresh),
-                  label: const Text('REFRESH'),
+                  tooltip: 'REFRESH',
                 ),
               ],
             ),
@@ -142,8 +173,12 @@ class _ItemManagerCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(8),
+                  image: item.master.imageUrl != null ? DecorationImage(
+                    image: NetworkImage(item.master.imageUrl!),
+                    fit: BoxFit.cover,
+                  ) : null,
                 ),
-                child: const Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey),
+                child: item.master.imageUrl == null ? const Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey) : null,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -166,7 +201,11 @@ class _ItemManagerCard extends StatelessWidget {
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
                     const SizedBox(height: 12),
-                    _ImagePreviewButton(imageCount: item.count?.images.length ?? 0),
+                    _ImagePreviewButton(
+                      imageCount: item.count?.images.length ?? 0,
+                      images: item.count?.images ?? [],
+                      itemName: item.master.itemName,
+                    ),
                   ],
                 ),
               ),
@@ -251,24 +290,38 @@ class _ItemManagerCard extends StatelessWidget {
 
 class _ImagePreviewButton extends StatelessWidget {
   final int imageCount;
+  final List<String> images;
+  final String itemName;
   final int maxImages = 5;
 
-  const _ImagePreviewButton({required this.imageCount});
+  const _ImagePreviewButton({
+    required this.imageCount, 
+    required this.images,
+    required this.itemName,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final bool hasImages = images.isNotEmpty;
+    
     return Stack(
       clipBehavior: Clip.none,
       children: [
         OutlinedButton(
-          onPressed: () {
-            // TODO: Show Image Gallery
-          },
+          onPressed: hasImages ? () => _showGallery(context) : null,
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            side: BorderSide(color: Colors.grey.shade300),
+            side: BorderSide(color: hasImages ? Colors.blue.shade300 : Colors.grey.shade300),
+            backgroundColor: hasImages ? Colors.blue.withOpacity(0.02) : null,
           ),
-          child: const Text('Images', style: TextStyle(fontSize: 12, color: Colors.black87)),
+          child: Text(
+            'Images', 
+            style: TextStyle(
+              fontSize: 12, 
+              color: hasImages ? Colors.blue : Colors.grey.shade400,
+              fontWeight: hasImages ? FontWeight.bold : FontWeight.normal,
+            )
+          ),
         ),
         Positioned(
           top: -8,
@@ -276,17 +329,169 @@ class _ImagePreviewButton extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: hasImages ? Colors.blue : Colors.white,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.grey.shade300),
+              border: Border.all(color: hasImages ? Colors.blue : Colors.grey.shade300),
             ),
             child: Text(
               '$imageCount/$maxImages',
-              style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 8, 
+                fontWeight: FontWeight.bold, 
+                color: hasImages ? Colors.white : Colors.black
+              ),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  void _showGallery(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => _ImageGalleryDialog(images: images, title: itemName),
+    );
+  }
+}
+
+class _ImageGalleryDialog extends StatefulWidget {
+  final List<String> images;
+  final String title;
+  const _ImageGalleryDialog({required this.images, required this.title});
+
+  @override
+  State<_ImageGalleryDialog> createState() => _ImageGalleryDialogState();
+}
+
+class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
+  final PageController _pageController = PageController();
+  int _currentIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(40),
+      child: Container(
+        width: 800,
+        height: 600,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Stack(
+          children: [
+            // 1. Image PageView
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: PageView.builder(
+                controller: _pageController,
+                onPageChanged: (index) => setState(() => _currentIndex = index),
+                itemCount: widget.images.length,
+                itemBuilder: (context, index) {
+                  return InteractiveViewer(
+                    child: Image.network(
+                      widget.images[index],
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(child: CircularProgressIndicator(color: Colors.white));
+                      },
+                      errorBuilder: (context, error, stackTrace) => const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.broken_image, color: Colors.white, size: 48),
+                            SizedBox(height: 8),
+                            Text('Failed to load image', style: TextStyle(color: Colors.white)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            // 2. Header (Title + Counter)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.title,
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                          Text(
+                            'Photo ${_currentIndex + 1} of ${widget.images.length}',
+                            style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // 3. Navigation Buttons
+            if (widget.images.length > 1) ...[
+              // Left
+              if (_currentIndex > 0)
+                Positioned(
+                  left: 20,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: FloatingActionButton.small(
+                      heroTag: 'prev',
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      elevation: 0,
+                      onPressed: () => _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut),
+                      child: const Icon(Icons.chevron_left, color: Colors.white),
+                    ),
+                  ),
+                ),
+              // Right
+              if (_currentIndex < widget.images.length - 1)
+                Positioned(
+                  right: 20,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: FloatingActionButton.small(
+                      heroTag: 'next',
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      elevation: 0,
+                      onPressed: () => _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut),
+                      child: const Icon(Icons.chevron_right, color: Colors.white),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

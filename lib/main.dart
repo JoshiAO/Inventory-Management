@@ -62,18 +62,7 @@ class AuthWrapper extends StatelessWidget {
 
     // Role-based routing
     if (authProvider.userModel!.role == 'superuser') {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Admin Dashboard'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () => authProvider.logout(),
-            )
-          ],
-        ),
-        body: const SuperuserDashboard(),
-      );
+      return const SuperuserDashboard();
     } else {
       return const CountSheetPage();
     }

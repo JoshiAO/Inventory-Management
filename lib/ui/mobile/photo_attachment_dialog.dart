@@ -8,15 +8,15 @@ import '../../providers/count_provider.dart';
 import '../../data/models/item_model.dart';
 import '../../data/models/count_model.dart';
 
-class PhotoAttachmentDialog extends StatefulWidget {
+class PhotoAttachmentSheet extends StatefulWidget {
   final ItemMaster item;
-  const PhotoAttachmentDialog({super.key, required this.item});
+  const PhotoAttachmentSheet({super.key, required this.item});
 
   @override
-  State<PhotoAttachmentDialog> createState() => _PhotoAttachmentDialogState();
+  State<PhotoAttachmentSheet> createState() => _PhotoAttachmentSheetState();
 }
 
-class _PhotoAttachmentDialogState extends State<PhotoAttachmentDialog> {
+class _PhotoAttachmentSheetState extends State<PhotoAttachmentSheet> {
   final ImagePicker _picker = ImagePicker();
 
   Future<void> _takePhoto() async {
@@ -25,20 +25,22 @@ class _PhotoAttachmentDialogState extends State<PhotoAttachmentDialog> {
     final itemCode = widget.item.itemCode;
     final existingDraft = countProvider.getDraft(itemCode);
 
-    final XFile? photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 50); // Compression here
+    final XFile? photo = await _picker.pickImage(source: ImageSource.camera, imageQuality: 50);
     if (photo == null) return;
 
-    final updatedDraft = CountModel(
-      id: existingDraft?.id ?? '',
-      timestamp: existingDraft?.timestamp ?? DateTime.now(),
+    final updatedDraft = (existingDraft ?? CountModel(
+      id: '',
+      timestamp: DateTime.now(),
       userId: user.uid,
       category: widget.item.category,
       productCode: itemCode,
       facilityId: user.facilityId,
-      quantities: existingDraft?.quantities ?? CountQuantities(countCase: 0, countSubcase: 0, countPiece: 0),
-      images: existingDraft?.images ?? [],
+      quantities: CountQuantities(countCase: 0, countSubcase: 0, countPiece: 0),
+      images: [],
+      localImagePaths: [],
+      isUploaded: false,
+    )).copyWith(
       localImagePaths: [...(existingDraft?.localImagePaths ?? []), photo.path],
-      isUploaded: existingDraft?.isUploaded ?? false,
     );
     countProvider.updateDraftCount(itemCode, updatedDraft);
   }
@@ -49,101 +51,179 @@ class _PhotoAttachmentDialogState extends State<PhotoAttachmentDialog> {
     final draft = countProvider.getDraft(widget.item.itemCode);
     final images = draft?.images ?? [];
     final localPaths = draft?.localImagePaths ?? [];
+    final totalCount = images.length + localPaths.length;
+    final profileUrl = draft?.profileImageUrl;
 
-    return AlertDialog(
-      title: Text('Photos: ${widget.item.itemName}'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (images.isEmpty && localPaths.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(20.0),
-                child: Text('No photos attached (Max 5)'),
-              ),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ...images.map((url) => _buildImageWidget(url, isLocal: false)),
-                ...localPaths.map((path) => _buildImageWidget(path, isLocal: true)),
-              ],
-            ),
-            const SizedBox(height: 20),
-            if ((images.length + localPaths.length) < 5)
-              ElevatedButton.icon(
-                onPressed: _takePhoto,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Take Photo'),
-              ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.item.itemName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text('Photos ($totalCount / 5)', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (totalCount == 0)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Column(
+                  children: [
+                    Icon(Icons.camera_enhance_outlined, size: 48, color: Colors.grey.shade300),
+                    const SizedBox(height: 12),
+                    Text('No photos attached yet.', style: TextStyle(color: Colors.grey.shade500)),
+                  ],
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: 120,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  ...images.map((url) => _buildImageThumbnail(url, isLocal: false, isProfile: profileUrl == url)),
+                  ...localPaths.map((path) => _buildImageThumbnail(path, isLocal: true, isProfile: profileUrl == path)),
+                ],
+              ),
+            ),
+          const SizedBox(height: 32),
+          if (totalCount < 5)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _takePhoto,
+                icon: const Icon(Icons.add_a_photo),
+                label: const Text('CAPTURE PHOTO'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
+        ],
+      ),
     );
   }
 
-  Widget _buildImageWidget(String source, {required bool isLocal}) {
+  Widget _buildImageThumbnail(String source, {required bool isLocal, required bool isProfile}) {
     final countProvider = context.read<CountProvider>();
+    final draft = countProvider.getDraft(widget.item.itemCode);
     
-    return Stack(
-      children: [
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: Colors.grey[200],
-            image: DecorationImage(
-              image: isLocal ? FileImage(File(source)) as ImageProvider : NetworkImage(source),
-              fit: BoxFit.cover,
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      width: 100,
+      child: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: isProfile ? Border.all(color: Colors.blue, width: 3) : Border.all(color: Colors.grey.shade200),
+              image: DecorationImage(
+                image: isLocal ? FileImage(File(source)) as ImageProvider : NetworkImage(source),
+                fit: BoxFit.cover,
+              ),
             ),
           ),
-        ),
-        Positioned(
-          right: 0,
-          top: 0,
-          child: GestureDetector(
-            onTap: () {
-              final existingDraft = countProvider.getDraft(widget.item.itemCode);
-              if (existingDraft != null) {
-                final newImages = [...existingDraft.images];
-                final newLocalPaths = [...existingDraft.localImagePaths];
-                
-                if (isLocal) newLocalPaths.remove(source);
-                else newImages.remove(source);
-
-                countProvider.updateDraftCount(
-                  widget.item.itemCode,
-                  CountModel(
-                    id: existingDraft.id,
-                    timestamp: existingDraft.timestamp,
-                    userId: existingDraft.userId,
-                    category: existingDraft.category,
-                    productCode: existingDraft.productCode,
-                    facilityId: existingDraft.facilityId,
-                    quantities: existingDraft.quantities,
-                    images: newImages,
-                    localImagePaths: newLocalPaths,
-                    isUploaded: existingDraft.isUploaded,
+          // Actions Overlay
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      isProfile ? Icons.star : Icons.star_border, 
+                      size: 18, 
+                      color: isProfile ? Colors.yellow : Colors.white
+                    ),
+                    onPressed: () {
+                      if (draft != null) {
+                        countProvider.updateDraftCount(
+                          widget.item.itemCode,
+                          draft.copyWith(profileImageUrl: source),
+                        );
+                      }
+                    },
+                    tooltip: 'Set as Profile',
                   ),
-                );
-              }
-            },
-            child: const CircleAvatar(
-              radius: 10,
-              backgroundColor: Colors.red,
-              child: Icon(Icons.close, size: 12, color: Colors.white),
+                  IconButton(
+                    icon: const Icon(Icons.delete, size: 18, color: Colors.white),
+                    onPressed: () {
+                      if (draft != null) {
+                        final newImages = [...draft.images];
+                        final newLocalPaths = [...draft.localImagePaths];
+                        String? newProfileUrl = draft.profileImageUrl;
+
+                        if (isLocal) newLocalPaths.remove(source);
+                        else newImages.remove(source);
+
+                        if (newProfileUrl == source) newProfileUrl = null;
+
+                        countProvider.updateDraftCount(
+                          widget.item.itemCode,
+                          draft.copyWith(
+                            images: newImages,
+                            localImagePaths: newLocalPaths,
+                            profileImageUrl: newProfileUrl,
+                          ),
+                        );
+                      }
+                    },
+                    tooltip: 'Remove',
+                  ),
+                ],
+              ),
             ),
           ),
-        )
-      ],
+          if (isProfile)
+            Positioned(
+              top: 4,
+              left: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('PROFILE', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

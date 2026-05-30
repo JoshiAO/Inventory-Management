@@ -9,7 +9,7 @@ class Facility {
     required this.location,
   });
 
-  factory Facility.fromFirestore(Map<String, dynamic> data, String docId) {
+  factory Facility.fromMap(Map<String, dynamic> data, String docId) {
     return Facility(
       id: docId,
       name: data['name'] ?? '',
@@ -17,7 +17,7 @@ class Facility {
     );
   }
 
-  Map<String, dynamic> toFirestore() {
+  Map<String, dynamic> toMap() {
     return {
       'name': name,
       'location': location,

@@ -15,7 +15,7 @@ class UserModel {
     required this.facilityId,
   });
 
-  factory UserModel.fromFirestore(Map<String, dynamic> data) {
+  factory UserModel.fromMap(Map<String, dynamic> data) {
     return UserModel(
       uid: data['uid'] ?? '',
       email: data['email'] ?? '',
@@ -26,7 +26,7 @@ class UserModel {
     );
   }
 
-  Map<String, dynamic> toFirestore() {
+  Map<String, dynamic> toMap() {
     return {
       'uid': uid,
       'email': email,

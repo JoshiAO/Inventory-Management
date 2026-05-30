@@ -15,7 +15,7 @@ class SsrBaseline {
     required this.facilityId,
   });
 
-  factory SsrBaseline.fromFirestore(Map<String, dynamic> data) {
+  factory SsrBaseline.fromMap(Map<String, dynamic> data) {
     return SsrBaseline(
       itemCode: data['item_code'] ?? '',
       itemName: data['item_name'] ?? '',
@@ -26,7 +26,7 @@ class SsrBaseline {
     );
   }
 
-  Map<String, dynamic> toFirestore() {
+  Map<String, dynamic> toMap() {
     return {
       'item_code': itemCode,
       'item_name': itemName,

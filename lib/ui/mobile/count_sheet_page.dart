@@ -21,8 +21,8 @@ class _CountSheetPageState extends State<CountSheetPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = context.read<AuthProvider>().userModel;
-      if (user != null && user.assignedCategories.isNotEmpty) {
-        context.read<CountProvider>().loadItems(user.assignedCategories.first);
+      if (user != null) {
+        context.read<CountProvider>().loadItems(user.assignedCategories, user.facilityId);
       }
     });
   }
@@ -32,6 +32,7 @@ class _CountSheetPageState extends State<CountSheetPage> {
     final authProvider = context.watch<AuthProvider>();
     final countProvider = context.watch<CountProvider>();
     final user = authProvider.userModel!;
+    final primaryColor = Theme.of(context).primaryColor;
 
     return Scaffold(
       appBar: AppBar(
@@ -51,14 +52,30 @@ class _CountSheetPageState extends State<CountSheetPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              onChanged: (v) => countProvider.updateSearch(v),
-              decoration: InputDecoration(
-                hintText: 'Search items...',
-                prefixIcon: const Icon(Icons.search),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              ),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    onChanged: (v) => countProvider.updateSearch(v),
+                    decoration: const InputDecoration(
+                      hintText: 'Search items...',
+                      prefixIcon: Icon(Icons.search),
+                      contentPadding: EdgeInsets.symmetric(vertical: 0),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: () => countProvider.toggleSSRFilter(!countProvider.showOnlyWithSSR),
+                  icon: Icon(countProvider.showOnlyWithSSR ? Icons.filter_alt : Icons.filter_alt_off),
+                  style: IconButton.styleFrom(
+                    backgroundColor: countProvider.showOnlyWithSSR ? primaryColor : Colors.grey.shade200,
+                    foregroundColor: countProvider.showOnlyWithSSR ? Colors.white : Colors.black54,
+                  ),
+                  tooltip: 'SSR Only',
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -155,8 +172,12 @@ class ItemCountCard extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
+                    image: item.imageUrl != null ? DecorationImage(
+                      image: NetworkImage(item.imageUrl!),
+                      fit: BoxFit.cover,
+                    ) : null,
                   ),
-                  child: Icon(Icons.inventory_2_outlined, color: primaryColor),
+                  child: item.imageUrl == null ? Icon(Icons.inventory_2_outlined, color: primaryColor) : null,
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -186,9 +207,11 @@ class ItemCountCard extends StatelessWidget {
                 IconButton(
                   icon: Icon(Icons.camera_alt_outlined, color: primaryColor),
                   onPressed: () {
-                    showDialog(
+                    showModalBottomSheet(
                       context: context,
-                      builder: (context) => PhotoAttachmentDialog(item: item),
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => PhotoAttachmentSheet(item: item),
                     );
                   },
                   tooltip: 'Add Photo',
@@ -261,28 +284,28 @@ class _QtyInput extends StatelessWidget {
           onChanged: (value) {
             final int newVal = int.tryParse(value) ?? 0;
             final auth = context.read<AuthProvider>();
-            
             final existingDraft = countProvider.getDraft(item.itemCode);
             
-            int c = type == 'case' ? newVal : (existingDraft?.quantities.countCase ?? 0);
-            int sc = type == 'subcase' ? newVal : (existingDraft?.quantities.countSubcase ?? 0);
-            int p = type == 'piece' ? newVal : (existingDraft?.quantities.countPiece ?? 0);
-
-            countProvider.updateDraftCount(
-              item.itemCode,
-              CountModel(
-                id: existingDraft?.id ?? '',
-                timestamp: DateTime.now(),
-                userId: auth.userModel!.uid,
-                category: item.category,
-                productCode: item.itemCode,
-                facilityId: auth.userModel!.facilityId,
-                quantities: CountQuantities(countCase: c, countSubcase: sc, countPiece: p),
-                images: existingDraft?.images ?? [],
-                localImagePaths: [],
-                isUploaded: false,
+            final updatedDraft = (existingDraft ?? CountModel(
+              id: '',
+              timestamp: DateTime.now(),
+              userId: auth.userModel!.uid,
+              category: item.category,
+              productCode: item.itemCode,
+              facilityId: auth.userModel!.facilityId,
+              quantities: CountQuantities(countCase: 0, countSubcase: 0, countPiece: 0),
+              images: [],
+              localImagePaths: [],
+              isUploaded: false,
+            )).copyWith(
+              quantities: CountQuantities(
+                countCase: type == 'case' ? newVal : (existingDraft?.quantities.countCase ?? 0),
+                countSubcase: type == 'subcase' ? newVal : (existingDraft?.quantities.countSubcase ?? 0),
+                countPiece: type == 'piece' ? newVal : (existingDraft?.quantities.countPiece ?? 0),
               ),
             );
+
+            countProvider.updateDraftCount(item.itemCode, updatedDraft);
           },
         ),
       ],

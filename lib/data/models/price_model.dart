@@ -15,7 +15,7 @@ class PriceList {
     required this.facilityId,
   });
 
-  factory PriceList.fromFirestore(Map<String, dynamic> data) {
+  factory PriceList.fromMap(Map<String, dynamic> data) {
     return PriceList(
       itemCode: data['item_code'] ?? '',
       itemName: data['item_name'] ?? '',
@@ -26,7 +26,7 @@ class PriceList {
     );
   }
 
-  Map<String, dynamic> toFirestore() {
+  Map<String, dynamic> toMap() {
     return {
       'item_code': itemCode,
       'item_name': itemName,

@@ -14,9 +14,16 @@ class FacilitySettingsPage extends StatelessWidget {
     final adminProvider = context.watch<AdminProvider>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Facility Settings')),
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        title: const Text('Facility Settings'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
+        elevation: 0,
+        centerTitle: false,
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
+        padding: const EdgeInsets.all(32.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

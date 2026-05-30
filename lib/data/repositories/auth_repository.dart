@@ -12,7 +12,7 @@ class AuthRepository {
     try {
       final doc = await _db.collection('users').doc(uid).get();
       if (doc.exists) {
-        return UserModel.fromFirestore(doc.data()!);
+        return UserModel.fromMap(doc.data()!);
       }
       return null;
     } catch (e) {
@@ -41,7 +41,7 @@ class AuthRepository {
       facilityId: facilityId,
     );
 
-    await _db.collection('users').doc(uid).set(userModel.toFirestore());
+    await _db.collection('users').doc(uid).set(userModel.toMap());
   }
 
   Future<void> signUp(String email, String password, String name, String role, List<String> categories, String facilityId) async {
