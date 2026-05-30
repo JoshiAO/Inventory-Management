@@ -92,7 +92,11 @@ class ItemManagerProvider extends BaseProvider {
         
         CountModel? latestCount;
         try {
-          latestCount = counts.firstWhere((c) => c.productCode == code);
+          final rawCount = counts.firstWhere((c) => c.productCode == code);
+          // Ensure only remote URLs are kept in the list
+          latestCount = rawCount.copyWith(
+            images: rawCount.images.where((url) => url.startsWith('http')).toList(),
+          );
         } catch (_) {
           latestCount = null;
         }

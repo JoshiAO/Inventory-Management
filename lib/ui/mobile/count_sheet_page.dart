@@ -4,7 +4,6 @@ import '../../providers/auth_provider.dart';
 import '../../providers/count_provider.dart';
 import '../../data/models/item_model.dart';
 import '../../data/models/count_model.dart';
-import '../../core/app_theme.dart';
 import 'photo_attachment_dialog.dart';
 import 'upload_summary_page.dart';
 
@@ -38,11 +37,6 @@ class _CountSheetPageState extends State<CountSheetPage> {
       appBar: AppBar(
         title: Text('${user.assignedCategories.join(", ")} Count'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.password_rounded),
-            onPressed: () => _showChangePasswordDialog(context, authProvider),
-            tooltip: 'Change Password',
-          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => authProvider.logout(),
@@ -99,51 +93,6 @@ class _CountSheetPageState extends State<CountSheetPage> {
           );
         },
         child: const Icon(Icons.cloud_upload),
-      ),
-    );
-  }
-
-  void _showChangePasswordDialog(BuildContext context, AuthProvider authProvider) {
-    final passwordController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Change Password'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter your new password below.'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'New Password'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                await authProvider.changePassword(passwordController.text.trim());
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Password changed successfully.')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.toString()), backgroundColor: AppTheme.errorColor),
-                  );
-                }
-              }
-            },
-            child: const Text('UPDATE'),
-          ),
-        ],
       ),
     );
   }

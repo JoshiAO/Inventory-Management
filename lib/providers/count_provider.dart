@@ -82,7 +82,7 @@ class CountProvider extends BaseProvider {
         }
 
         final finalCount = count.copyWith(
-          images: [...count.images, ...uploadedUrls],
+          images: [...count.images, ...uploadedUrls].where((url) => url.startsWith('http')).toList(),
           localImagePaths: [],
           profileImageUrl: finalProfileUrl,
           isUploaded: true,

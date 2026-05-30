@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'dart:math';
+import 'dart:ui_web' as ui;
+import 'dart:html' as html;
+
 import '../../providers/item_manager_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/admin_provider.dart';
@@ -68,9 +72,9 @@ class _ItemManagerPageState extends State<ItemManagerPage> {
                   flex: 1,
                   child: DropdownButtonFormField<String>(
                     value: provider.selectedCategory,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Filter Category',
-                      fillColor: Colors.grey.shade50,
+                      fillColor: Colors.grey,
                     ),
                     items: provider.categories.map((cat) {
                       return DropdownMenuItem(value: cat, child: Text(cat));
@@ -83,9 +87,9 @@ class _ItemManagerPageState extends State<ItemManagerPage> {
                   flex: 1,
                   child: DropdownButtonFormField<String>(
                     value: _selectedFacilityId,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Facility',
-                      fillColor: Colors.grey.shade50,
+                      fillColor: Colors.grey,
                     ),
                     items: adminProvider.facilities.map((f) {
                       return DropdownMenuItem(value: f.id, child: Text(f.name));
@@ -152,6 +156,7 @@ class _ItemManagerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = _getStatusColor(item.status);
+    final String? profileUrl = item.master.imageUrl?.replaceFirst('http://', 'https://');
     
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -166,19 +171,20 @@ class _ItemManagerCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 1. Image & Basic Info
+              // 1. Image (Using platform view for CORS safety)
               Container(
                 width: 100,
                 height: 100,
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(8),
-                  image: item.master.imageUrl != null ? DecorationImage(
-                    image: NetworkImage(item.master.imageUrl!),
-                    fit: BoxFit.cover,
-                  ) : null,
                 ),
-                child: item.master.imageUrl == null ? const Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey) : null,
+                child: profileUrl != null 
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: _HtmlImage(url: profileUrl),
+                    )
+                  : const Icon(Icons.inventory_2_outlined, size: 40, color: Colors.grey),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -288,6 +294,26 @@ class _ItemManagerCard extends StatelessWidget {
   }
 }
 
+class _HtmlImage extends StatelessWidget {
+  final String url;
+  const _HtmlImage({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    final viewId = 'img-${url.hashCode}';
+    // ignore: undefined_prefixed_name
+    ui.platformViewRegistry.registerViewFactory(
+      viewId,
+      (int viewId) => html.ImageElement()
+        ..src = url
+        ..style.width = '100%'
+        ..style.height = '100%'
+        ..style.objectFit = 'cover',
+    );
+    return HtmlElementView(viewType: viewId);
+  }
+}
+
 class _ImagePreviewButton extends StatelessWidget {
   final int imageCount;
   final List<String> images;
@@ -382,7 +408,7 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
         ),
         child: Stack(
           children: [
-            // 1. Image PageView
+            // 1. Image PageView (Using platform view for CORS safety)
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
               child: PageView.builder(
@@ -390,25 +416,21 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
                 onPageChanged: (index) => setState(() => _currentIndex = index),
                 itemCount: widget.images.length,
                 itemBuilder: (context, index) {
+                  final url = widget.images[index].replaceFirst('http://', 'https://');
+                  final viewId = 'gallery-img-$index-${url.hashCode}';
+                  
+                  // ignore: undefined_prefixed_name
+                  ui.platformViewRegistry.registerViewFactory(
+                    viewId,
+                    (int viewId) => html.ImageElement()
+                      ..src = url
+                      ..style.width = '100%'
+                      ..style.height = '100%'
+                      ..style.objectFit = 'contain',
+                  );
+
                   return InteractiveViewer(
-                    child: Image.network(
-                      widget.images[index],
-                      fit: BoxFit.contain,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return const Center(child: CircularProgressIndicator(color: Colors.white));
-                      },
-                      errorBuilder: (context, error, stackTrace) => const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.broken_image, color: Colors.white, size: 48),
-                            SizedBox(height: 8),
-                            Text('Failed to load image', style: TextStyle(color: Colors.white)),
-                          ],
-                        ),
-                      ),
-                    ),
+                    child: HtmlElementView(viewType: viewId),
                   );
                 },
               ),
@@ -444,6 +466,13 @@ class _ImageGalleryDialogState extends State<_ImageGalleryDialog> {
                           ),
                         ],
                       ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new, color: Colors.white, size: 20),
+                      tooltip: 'Open Original',
+                      onPressed: () {
+                        html.window.open(widget.images[_currentIndex], '_blank');
+                      },
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.white),
